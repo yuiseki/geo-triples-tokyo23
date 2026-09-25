@@ -10,12 +10,12 @@ import vocab
 # through as a silently different dataset: the card quotes these numbers, and
 # a card quoting numbers the files do not have is worse than no card.
 EXPECTED = {
-    "rows": 346256,
-    "pairs": 36694,
-    "true": 126208,
-    "false": 220048,
-    "observed": 293552,
-    "composition": 52704,
+    "rows": 510616,
+    "pairs": 51436,
+    "true": 202116,
+    "false": 308500,
+    "observed": 411488,
+    "composition": 99128,
 }
 
 # The eight Simple Features predicates as patterns over a DE-9IM matrix, in
@@ -98,7 +98,16 @@ def test_exactly_one_rcc8_per_pair(triples):
         if t["derivation"] == "observed":
             per_pair[(t["subject_id"], t["object_id"])].add(t["rcc8"])
     assert all(len(v) == 1 for v in per_pair.values())
-    assert set().union(*per_pair.values()) <= set(vocab.RCC8)
+    # Empty is one of the readings, and it is not a missing one. RCC8 is a
+    # calculus of regions, so a pair with a point in it has no RCC8 relation
+    # and its column is empty rather than holding the nearest relation.
+    assert set().union(*per_pair.values()) <= set(vocab.RCC8) | {""}
+    kinds = {(t["subject_id"], t["object_id"]):
+             (t["subject_kind"], t["object_kind"])
+             for t in triples if t["derivation"] == "observed"}
+    for pair, values in per_pair.items():
+        empty = next(iter(values)) == ""
+        assert empty == (kinds[pair] != ("area", "area")), pair
 
 
 def test_every_truth_is_the_matrix_reading(triples):
@@ -122,6 +131,12 @@ def test_matrices_are_well_formed(triples):
     carrying no evidence at all.
     """
     for t in triples:
+        if t["de9im"] is None:
+            # A composed row the oracle never formed a pair for. There is no
+            # matrix because nothing was measured, which the row says by
+            # leaving the column empty rather than by inventing one.
+            assert t["derivation"] == "composition", t
+            continue
         assert len(t["de9im"]) == 9, t
         assert set(t["de9im"]) <= set("FT012"), t
 
@@ -176,7 +191,7 @@ def test_composition_agrees_with_the_vendored_table(triples, oracle_dir):
         s = rel[(t["via_id"], t["object_id"])]
         allowed = table[(r.lower(), s.lower())]
         assert len(allowed) == 1, (r, s, allowed)
-        entailed = next(iter(allowed)).upper()
+        entailed = build.CANONICAL[next(iter(allowed))]
         assert entailed == t["rcc8"], (t, entailed)
         assert vocab.RCC8_TO_SF[entailed] == t["predicate"], t
 
@@ -198,6 +213,12 @@ def test_composition_never_contradicts_the_geometry(triples, oracle_dir):
     for t in triples:
         if t["derivation"] != "composition":
             continue
+        if t["de9im"] is None:
+            # Never formed, so there is no observation to contradict. These
+            # are the rows that reach past what the oracle measured: a place
+            # inside a ward inside a country the place was never compared to.
+            assert (t["subject_id"], t["object_id"]) not in rel, t
+            continue
         observed = rel.get((t["subject_id"], t["object_id"]), "DC")
         assert observed == t["rcc8"], t
 
@@ -208,9 +229,14 @@ def test_composition_cells_are_named_not_assumed(manifest):
     If this ever passes with many more cells the card's paragraph about the
     concentration is out of date, which is a quieter kind of wrong than a
     count being off.
+
+    Six of the 64, up from four when the layers were all administrative. The
+    two new ones are the chain the places brought: a place inside a ward
+    inside a country is NTPP x NTPP, and its converse.
     """
     cells = manifest["composition_cells_used"]
-    assert set(cells) == {"EC x EQ", "EC x NTPPi", "EQ x EC", "NTPP x EC"}
+    assert set(cells) == {"EC x EQ", "EC x NTPPi", "EQ x EC", "NTPP x EC",
+                          "NTPP x NTPP", "NTPPi x NTPPi"}
     assert sum(cells.values()) == EXPECTED["composition"]
 
 
@@ -292,7 +318,8 @@ def test_the_certificates_are_the_vendored_verdicts(triples):
     for t in triples:
         if t["derivation"] != "observed":
             continue
-        want = verdicts[(t["de9im"], "area", "area", t["predicate"])]
+        want = verdicts[(t["de9im"], t["subject_kind"], t["object_kind"],
+                         t["predicate"])]
         assert t["certificate"] == f"de9im:{want}"
 
 

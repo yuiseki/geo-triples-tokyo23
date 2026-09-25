@@ -5,10 +5,10 @@ import build
 import vocab
 
 EXPECTED = {
-    "rows": 305208,
-    "ntriples": 126208,
-    "en": 89500,
-    "ja": 89500,
+    "rows": 483922,
+    "ntriples": 202116,
+    "en": 131140,
+    "ja": 150666,
 }
 
 
@@ -118,8 +118,13 @@ def test_sentences_are_reproducible_from_their_triple(cpt, triples, labels):
     # recoverable from the rcc8 of the two observed pairs a composed row went
     # through, so carrying them would be two more columns saying what another
     # row already says.
+    # Only the pairs that have an RCC8 relation at all. A composed row's two
+    # premises always do, because composition is defined over regions, so
+    # skipping the rest loses nothing and keeps a point out of a table that
+    # has no row for it.
     observed = {(t["subject_id"], t["object_id"]): vocab.RCC8_TO_SF[t["rcc8"]]
-                for t in triples if t["derivation"] == "observed"}
+                for t in triples
+                if t["derivation"] == "observed" and t["rcc8"]}
     checked = 0
     for r in cpt:
         if r["form"] == "ntriples":
@@ -153,8 +158,26 @@ def test_no_sentence_borrows_a_name_from_another_language(cpt, labels):
             theirs = names.get((r[side], other[r["form"]]))
             assert mine, r
             assert mine in r["text"], r
-            if theirs and theirs != mine:
+            if theirs and theirs != mine and not inside_a_label(theirs, r,
+                                                                names):
                 assert theirs not in r["text"], (r, theirs)
+
+
+def inside_a_label(text, row, names):
+    """Whether this string is part of a label the sentence legitimately uses.
+
+    An editor may put both languages in one name tag: name:en of
+    渋谷区立松濤中学校 is "渋谷区立松濤中学校 Shoto Junior High School". The
+    ward's Japanese name is then inside the English sentence because the
+    school's own English label contains it, which says nothing about a
+    fallback in the renderer.
+    """
+    for side in ("subject_id", "object_id"):
+        for lang in vocab.LANGS:
+            label = names.get((row[side], lang))
+            if label and text in label and text != label:
+                return True
+    return False
 
 
 def test_only_spoken_predicates_become_sentences(cpt):
@@ -178,8 +201,22 @@ def test_the_label_gap_is_visible_in_the_counts(cpt, triples):
     and nobody would notice from the counts alone.
     """
     unspoken = sum(1 for t in triples
-                   if t["truth"] and t["predicate"] not in vocab.SPOKEN)
+                   if t["truth"] and not vocab.wording(t))
     by_form = collections.Counter(r["form"] for r in cpt)
-    unlabelled = by_form["ntriples"] - unspoken - by_form["en"]
-    assert unspoken == 36694
-    assert unlabelled == 14
+    gaps = {lang: by_form["ntriples"] - unspoken - by_form[lang]
+            for lang in vocab.LANGS}
+
+    # sfIntersects, true of every observed pair and saying almost nothing.
+    # It is the whole of the unspoken set: the predicates a point and an area
+    # have no wording for are also the ones that are never true of them, so
+    # adding the places moved this number by exactly the number of new pairs.
+    assert unspoken == 51436
+
+    # The two languages part company here, and the direction is the useful
+    # part. Seven Natural Earth features carry no label in any language and
+    # account for the Japanese gap entirely. The English gap is four orders
+    # larger because a place in OpenStreetMap usually has name:ja and often
+    # has no name:en, which is a fact about the source rather than about this
+    # build.
+    assert gaps["ja"] == 14
+    assert gaps["en"] == 19540

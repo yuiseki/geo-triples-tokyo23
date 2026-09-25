@@ -9,8 +9,24 @@
 # this file does not.
 #
 # prover: LeanGeospatial 6772728790769adc892bb361effb22901821b74a
-# claims: 144
+# claims: 176
 matrix	a_kind	b_kind	predicate	verdict
+0F2FF1FF2	area	point	sfContains	entailed
+0F2FF1FF2	area	point	sfCrosses	refuted
+0F2FF1FF2	area	point	sfDisjoint	refuted
+0F2FF1FF2	area	point	sfEquals	refuted
+0F2FF1FF2	area	point	sfIntersects	entailed
+0F2FF1FF2	area	point	sfOverlaps	refuted
+0F2FF1FF2	area	point	sfTouches	refuted
+0F2FF1FF2	area	point	sfWithin	refuted
+0FFFFF212	point	area	sfContains	refuted
+0FFFFF212	point	area	sfCrosses	refuted
+0FFFFF212	point	area	sfDisjoint	refuted
+0FFFFF212	point	area	sfEquals	refuted
+0FFFFF212	point	area	sfIntersects	entailed
+0FFFFF212	point	area	sfOverlaps	refuted
+0FFFFF212	point	area	sfTouches	refuted
+0FFFFF212	point	area	sfWithin	entailed
 212101212	area	area	sfContains	refuted
 212101212	area	area	sfCrosses	refuted
 212101212	area	area	sfDisjoint	refuted
@@ -51,6 +67,14 @@ matrix	a_kind	b_kind	predicate	verdict
 212F11FF2	area	area	sfOverlaps	refuted
 212F11FF2	area	area	sfTouches	refuted
 212F11FF2	area	area	sfWithin	refuted
+212FF1212	area	area	sfContains	refuted
+212FF1212	area	area	sfCrosses	refuted
+212FF1212	area	area	sfDisjoint	refuted
+212FF1212	area	area	sfEquals	refuted
+212FF1212	area	area	sfIntersects	entailed
+212FF1212	area	area	sfOverlaps	entailed
+212FF1212	area	area	sfTouches	refuted
+212FF1212	area	area	sfWithin	refuted
 212FF1FF2	area	area	sfContains	entailed
 212FF1FF2	area	area	sfCrosses	refuted
 212FF1FF2	area	area	sfDisjoint	refuted
@@ -67,6 +91,14 @@ matrix	a_kind	b_kind	predicate	verdict
 2F2111212	area	area	sfOverlaps	entailed
 2F2111212	area	area	sfTouches	refuted
 2F2111212	area	area	sfWithin	refuted
+2F21F1212	area	area	sfContains	refuted
+2F21F1212	area	area	sfCrosses	refuted
+2F21F1212	area	area	sfDisjoint	refuted
+2F21F1212	area	area	sfEquals	refuted
+2F21F1212	area	area	sfIntersects	entailed
+2F21F1212	area	area	sfOverlaps	entailed
+2F21F1212	area	area	sfTouches	refuted
+2F21F1212	area	area	sfWithin	refuted
 2F2F11212	area	area	sfContains	refuted
 2F2F11212	area	area	sfCrosses	refuted
 2F2F11212	area	area	sfDisjoint	refuted

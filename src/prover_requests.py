@@ -114,8 +114,15 @@ def claim_requests(rows):
     seen, out = set(), []
     for r in rows:
         held = set(r["sf_raw"].split(",")) if r["sf_raw"] else set()
+        # sfOverlaps and sfCrosses are defined by cases on the dimensions of
+        # the operands, so what a matrix entails depends on the kinds and the
+        # question is asked per matrix and kinds rather than per matrix. Since
+        # the named places arrived, not every pair is two areas: a ward holds
+        # a point whose matrix no pair of areas can have.
+        a_kind = r.get("subject_kind") or "area"
+        b_kind = r.get("object_kind") or "area"
         for claim, column in sorted(CLAIMS.items()):
-            key = (r["de9im_raw"], claim)
+            key = (r["de9im_raw"], a_kind, b_kind, claim)
             if key in seen:
                 continue
             seen.add(key)
@@ -123,12 +130,8 @@ def claim_requests(rows):
                 "id": f"c{len(out):07d}",
                 "matrix": r["de9im_raw"],
                 "claim": claim,
-                # sfOverlaps and sfCrosses are defined by cases on the
-                # dimensions of the operands, so the prover asks which kinds
-                # these are rather than guessing. Everything in this file is
-                # an administrative area.
-                "a_kind": "area",
-                "b_kind": "area",
+                "a_kind": a_kind,
+                "b_kind": b_kind,
                 "observed": column in held,
             })
     return out

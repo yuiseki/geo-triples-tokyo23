@@ -34,7 +34,7 @@ configs:
 
 # geo-triples-tokyo23
 
-346,256 spatial triples, 305,208 text rows and 2,913 evaluation questions,
+510,616 spatial triples, 483,922 text rows and 8,890 evaluation questions,
 computed from two frozen, openly-licensed sources by an oracle with no model
 and no network in the loop. Same input and same versions, same Parquet, byte
 for byte.
@@ -63,12 +63,26 @@ probe   = load_dataset("yuiseki/geo-triples-tokyo23", "probe", split="train")
 | layer | features | source | licence |
 |---|---|---|---|
 | `tokyo23` | 23 | [`yuiseki/osm-tokyo23-src-2026-08`](https://huggingface.co/datasets/yuiseki/osm-tokyo23-src-2026-08) `e60e017` | ODbL-1.0 |
+| `tokyo23-poi` | 7,265 | the same dataset, point and polygon tables | ODbL-1.0 |
 | `ne-admin0` | 258 | [`yuiseki/ne-admin0-10m`](https://huggingface.co/datasets/yuiseki/ne-admin0-10m) `d1d37a1` | public domain |
 | `ne-admin1` | 4,596 | [`yuiseki/ne-admin0-10m`](https://huggingface.co/datasets/yuiseki/ne-admin0-10m) `d1d37a1` | public domain |
 
-4,877 features make 23,780,252 ordered pairs. 36,694 of them are not
-disjoint, and those are the pairs the oracle wrote down. A pair that is
-absent is DC, matrix `FF2FF1212`.
+`tokyo23-poi` is one feature per Wikidata id: 3,740 mapped as areas, 3,485 as
+points, and 63 mapped both ways where the area is kept. The 23 wards' own ids
+are excluded, because a ward is also a place node at its centre and would
+otherwise be a place inside itself.
+
+12,142 features make 147,416,022 ordered pairs. 24,114,442 of them are formed
+and 51,436 of those are not disjoint. The places are compared against the
+wards and against nothing else: 7,265 places against each other is a different
+dataset with a different cost, and the question they were added for is which
+ward a place is in.
+
+A pair that was formed and is absent is disjoint, and how that is spelled
+depends on the kinds: `FF2FF1212` for two areas, `FF0FFF212` for a point
+against an area. A pair that was never formed is absent for a different reason
+and says nothing. The oracle's manifest carries both the table and the list of
+which layers were compared.
 
 The oracle is [YuisekinGeoSPARQL](https://github.com/yuiseki/YuisekinGeoSPARQL),
 which loads the sources into Apache Jena Fuseki 6.2.0 and compares GEOS
@@ -92,6 +106,12 @@ More than one Simple Features predicate holds of a pair. Two equal areas are
 exclusive reading is the `rcc8` column beside them, where exactly one of
 eight relations holds.
 
+Not for every pair, though. RCC8 is a calculus of regions, and a place mapped
+as a node is a point, so 6,898 rows have an empty `rcc8` and their Simple
+Features columns are the whole reading. The kinds are columns for the same
+reason: `sfOverlaps` needs both operands to have the same dimension, and
+`sfCrosses` needs them to differ in a fixed argument order.
+
 | column | |
 |---|---|
 | `subject_id`, `subject_iri`, `subject_name`, `subject_source`, `subject_layer` | the subject feature |
@@ -99,7 +119,8 @@ eight relations holds.
 | `object_id`, `object_iri`, `object_name`, `object_source`, `object_layer` | the object feature |
 | `truth` | whether it holds |
 | `de9im` | the nine-cell matrix that decides it |
-| `rcc8` | the single RCC8 relation of the pair |
+| `rcc8` | the single RCC8 relation of the pair, empty unless both kinds are `area` |
+| `subject_kind`, `object_kind` | `point` or `area` |
 | `derivation` | `observed`, read off the geometry, or `composition`, entailed by two observed rows |
 | `certification` | `certified` if LeanGeospatial proves this step, `uncertified` if it leaves it open |
 | `certificate` | what was proved: `de9im:entailed`, `de9im:refuted`, or the composition cell |
@@ -109,17 +130,23 @@ eight relations holds.
 
 ### What is proved, and what is only observed
 
-All 346,256 rows are `certified`, and it is worth being exact about what that
+All 510,616 rows are `certified`, and it is worth being exact about what that
 does and does not cover.
 
 What is proved is the step from a matrix to a predicate. Given matrix
 `FF2F11212` over two areas, LeanGeospatial derives `sfTouches` and refutes
-the other seven; the verdicts for all 18 matrices this data produces, 144 in
+the other seven; the verdicts for all 22 matrices this data produces, 176 in
 all, are vendored in `vendor/de9im_sf_verdicts.tsv` with the revision that
 produced them. The build reads that file and stops if a verdict disagrees
 with what the oracle read. None does. For a composed row, what is proved is
 the cell: `EC x NTPPi` entails `DC` and nothing else, in the table
 `table_eq_published` shows equal to the machine-checked one.
+
+The kinds are part of the question. `sfCrosses` between an area and a point
+is not one of the cases SFA lists, and the prover refuses it even though the
+matrix of a ward holding a point matches the pattern perfectly well. Asking
+without the kinds would have shipped every ward crossing every place inside
+it.
 
 What is not proved is the matrix itself. That two geometries relate as
 `FF2F11212` is a measurement made by GEOS, checked against JTS, on vertices
@@ -136,29 +163,30 @@ step.
 
 | predicate | observed | composed | total |
 |---|---:|---:|---:|
-| `sfIntersects` | 36,694 | 0 | 36,694 |
-| `sfTouches` | 26,900 | 136 | 27,036 |
-| `sfDisjoint` | 0 | 52,568 | 52,568 |
-| `sfContains` | 3,604 | 0 | 3,604 |
-| `sfWithin` | 3,604 | 0 | 3,604 |
-| `sfOverlaps` | 2,644 | 0 | 2,644 |
+| `sfIntersects` | 51,436 | 0 | 51,436 |
+| `sfDisjoint` | 0 | 90,398 | 90,398 |
+| `sfTouches` | 26,906 | 136 | 27,042 |
+| `sfContains` | 10,724 | 4,297 | 15,021 |
+| `sfWithin` | 10,724 | 4,297 | 15,021 |
+| `sfOverlaps` | 3,140 | 0 | 3,140 |
 | `sfEquals` | 58 | 0 | 58 |
 | `sfCrosses` | 0 | 0 | 0 |
 
 This is lopsided and the shape is worth reading before using it.
 
-`sfDisjoint` is 42% of all true triples and every single one is a deduction.
+`sfDisjoint` is 45% of all true triples and every single one is a deduction.
 No observed row is disjoint, because the oracle only writes pairs that are
 not. `sfCrosses` is never true, because SFA gives it no area/area case at
 all and every feature here is an area; it stays in the table as eight
 thousand honest negatives rather than being dropped.
 
-The `rcc8` column over the 36,694 observed pairs: EC 26,900, PO 2,644, TPP
-2,080, TPPi 2,080, NTPP 1,466, NTPPi 1,466, EQ 58.
+The `rcc8` column over the 51,436 observed pairs: EC 26,906, NTPP 5,134,
+NTPPi 5,134, PO 3,140, TPP 2,083, TPPi 2,083, EQ 58, and 6,898 with none
+because a point is not a region.
 
 ### Composed rows, and which cells they use
 
-52,704 rows have `derivation = composition`. They are not extra
+99,128 rows have `derivation = composition`. They are not extra
 observations: for each, two known relations through the feature in `via_id`
 left the composition table with exactly one possible relation, and that is
 what the row records. Cells where the table leaves several entail nothing and
@@ -171,17 +199,27 @@ converse pairs:
 
 | cell | rows | entails |
 |---|---:|---|
-| EC x NTPPi | 26,284 | DC |
-| NTPP x EC | 26,284 | DC |
+| EC x NTPPi | 45,199 | DC |
+| NTPP x EC | 45,199 | DC |
+| NTPP x NTPP | 4,297 | NTPP |
+| NTPPi x NTPPi | 4,297 | NTPPi |
 | EC x EQ | 68 | EC |
 | EQ x EC | 68 | EC |
 
-99.7% of them are one shape of argument: a country borders another country,
+91% of them are one shape of argument: a country borders another country,
 that country contains a state, therefore the first country and that state do
-not meet. The remaining 136 are the same argument where a country and its
-only state are equal. Anyone wanting broad coverage of RCC8 composition
-should generate it from the prover requests instead, where 27 of the 64 cells
-are exercised; see below.
+not meet. The two NTPP cells are what the places brought, and they are the
+interesting ones: a place is in a ward, the ward is in a country, therefore
+the place is in that country.
+
+9,326 rows are conclusions about pairs the oracle never formed. The places
+are compared against the wards only, so nothing measured Sensoji against
+Japan; the composition table settles it anyway, and those rows carry an empty
+`de9im` rather than a matrix nobody read. They are the rows that reach past
+what was measured, which is what a composition table is for.
+
+Anyone wanting broad coverage of RCC8 composition should generate it from the
+prover requests instead, where 27 of the 64 cells are exercised; see below.
 
 The composition table is vendored from
 [LeanGeospatial](https://github.com/yuiseki/LeanGeospatial), whose theorem
@@ -191,7 +229,7 @@ contradicts what the oracle observed. None does.
 
 ## The `cpt` subset
 
-305,208 rows, 48,294,005 characters. One row per true triple per form.
+483,922 rows, 82,510,457 characters. One row per true triple per form.
 
 The text is layered, and each layer takes the triple as its input:
 
@@ -201,9 +239,9 @@ The text is layered, and each layer takes the triple as its input:
 
 | `form` | rows | characters | mean length |
 |---|---:|---:|---:|
-| `ntriples` | 126,208 | 37,696,172 | 298.7 |
-| `en` | 89,500 | 6,567,573 | 73.4 |
-| `ja` | 89,500 | 4,030,260 | 45.0 |
+| `ntriples` | 202,116 | 64,853,340 | 320.9 |
+| `ja` | 150,666 | 6,851,881 | 45.5 |
+| `en` | 131,140 | 10,805,236 | 82.4 |
 
 The N-Triples form is unconditional, which is the point: the coverage gap is
 a missing `ja` row beside a present `ntriples` row, visible by counting,
@@ -227,24 +265,42 @@ Afghanistan borders People's Republic of China. People's Republic of China conta
 アフガニスタンは中華人民共和国と接している。中華人民共和国は青海省を含む。したがってアフガニスタンと青海省は接していない。
 ```
 
-### Why 36,708 triples have no sentence
+### Why the three forms do not have the same number of rows
 
-126,208 minus 89,500. Two causes, and both are deliberate.
+202,116 N-Triples lines, 150,666 Japanese sentences, 131,140 English ones.
 
-36,694 are `sfIntersects`, which holds of every observed pair and says
-almost nothing. Along with `sfCrosses` it is kept in the triples table and in
-the N-Triples form and is never spoken, because a corpus full of "A and B
-intersect" teaches a model to produce filler.
+51,436 true triples are `sfIntersects`, which holds of every observed pair and
+says almost nothing. Along with `sfCrosses` it is kept in the triples table
+and in the N-Triples form and is never spoken, because a corpus full of "A
+and B intersect" teaches a model to produce filler. That accounts for the
+whole gap in Japanese but 14 rows.
 
-14 involve one of seven Natural Earth features that carry no label in any
-language: the `_99_` remainder polygons of Anguilla, Antarctica, Colombia,
-Kiribati, Mexico, Russia and Venezuela. A feature with no label in a
-language gets no sentence in that language, rather than a romanisation
-passed off as that language.
+Those 14 involve one of seven Natural Earth features that carry no label in
+any language: the `_99_` remainder polygons of Anguilla, Antarctica,
+Colombia, Kiribati, Mexico, Russia and Venezuela.
 
-`en` and `ja` are equal at 89,500 only because those same seven features are
-the ones missing from both. That is an accident of this build and not a
-property to rely on.
+The English gap is 19,540, and it is a fact about OpenStreetMap rather than
+about this build: a place in Tokyo usually carries `name:ja` and often
+carries no `name:en`. A feature with no label in a language gets no sentence
+in that language, rather than a romanisation passed off as that language,
+which is why this is the one dataset here where Japanese is the larger half.
+
+### How a place is worded
+
+A point is not contained in a ward the way a smaller area is, so the two
+predicates that can hold between a point and an area have wording of their
+own.
+
+```
+浅草寺は台東区にある。            Sensō-ji is in Taito.
+台東区には浅草寺がある。          Taito has Sensō-ji.
+高千穂大学は杉並区に含まれる。     Takachiho University is within Suginami.
+```
+
+The third is an area, so it keeps the area wording. Everything else involving
+a point is left unspoken rather than worded by analogy: a point on a ward
+boundary does touch it, and saying so takes a sentence about boundaries that
+nobody asked for.
 
 ### Two things the sentences will say that read oddly
 
@@ -269,12 +325,13 @@ reading should use the oracle's normalized column instead of rewording these.
 
 ## The `probe` subset
 
-2,913 questions, 2,906 of them answerable in Japanese. Which parent does this
+8,890 questions, 8,883 of them answerable in Japanese. Which parent does this
 place have, at each level of the hierarchy the sources describe.
 
 | level | questions | choosing among | chance |
 |---|---:|---:|---:|
-| `state-in-country` | 2,896 | 258 countries | 0.4% |
+| `place-in-ward` | 6,162 | 23 wards | 4.3% |
+| `state-in-country` | 2,711 | 258 countries | 0.4% |
 | `ward-in-state` | 17 | 47 prefectures | 2.1% |
 
 **Every answer in this subset is stated in `cpt`.** It measures whether
@@ -295,28 +352,47 @@ that reason.
 A child that meets two parents is dropped, which is why 17 wards are asked
 about and not 23: six of them touch Chiba as well as Tokyo.
 
+A child whose name does not pick it out is dropped too. 21 of the places are
+called 天祖神社 and they are in different wards, so "which ward is 天祖神社
+in" has 21 answers and any one of them scores a model on a coin toss. The
+same rule removes 185 states that share a name with another state. Dropped
+rather than disambiguated: a name plus a ward would be a question containing
+its own answer.
+
 18 questions give the answer away, and they are kept rather than quietly
 filtered. They are the `EQ` rows: a country with one state carries a feature
 in both layers with the same label, so the question reads "which country is
 Aruba in" and the answer is Aruba. 0.6% of the set, and a reader filtering
 on `rcc8 != "EQ"` removes them.
 
-For scale, a 35B model answering 120 questions per level:
+For scale, 120 questions per level, asked of a 35B model and of the 270M one
+this corpus was built for:
 
-| | `state-in-country` | `ward-in-state` |
-|---|---:|---:|
-| English | 76.7% | 100.0% |
-| Japanese | 43.3% | 94.1% |
+| model | | `place-in-ward` | `state-in-country` | `ward-in-state` |
+|---|---|---:|---:|---:|
+| Qwen3.6-35B-A3B | en | 28.3% | 75.8% | 94.1% |
+| Qwen3.6-35B-A3B | ja | 41.7% | 49.2% | 94.1% |
+| gemma-3-270m-it | en | 3.3% | 20.0% | 23.5% |
+| gemma-3-270m-it | ja | 18.3% | 4.2% | 0.0% |
 
-The ward level is saturated and the country level is not, and the 33-point
-gap between asking in English and asking in Japanese is the thing this probe
-is most useful for.
+Three things are worth reading off that table. The ward level is saturated at
+35B and the place level is nowhere near it, so the places are where there is
+room to move. The language gap reverses between levels: countries are easier
+to name in English and places in Tokyo are easier to name in Japanese, which
+is the same fact as the `name:en` gap above. And the 270M model is at or
+below chance in three of the six cells.
 
 ## What this is for, and what is not known about it
 
 The target it was built against is a model that cannot answer "which
 prefecture is Matsuyama in": 2.0% on `gemma-3-270m` against 83.6% on a 35B
-model. Small models do not carry administrative geography.
+model. Small models do not carry administrative geography, and a fine-tune
+teaches the shape of an answer rather than the geography, so the model writes
+a well-formed place that does not exist.
+
+The `place-in-ward` level is the closest this dataset gets to that failure.
+7,265 named places in Tokyo, each in exactly one ward, in a corpus that says
+so in three forms.
 
 N-Triples text teaches IRI patterns and the shape of a GeoSPARQL statement.
 Whether that transfers to a Japanese question asked in ordinary words is an
@@ -348,9 +424,9 @@ python3 -m pytest
 
 | file | sha256 |
 |---|---|
-| `triples.parquet` | `b1982060e4bcb28f71d8aa3d198bf7a7f670fff41b1969c2f9338b298fed2ca7` |
-| `cpt.parquet` | `ac96bad7ce02ba88f6e372ec462616580d1af39dc09efd24418d5ea8ee66e795` |
-| `probe.parquet` | `617c9eedc460518e8ae6f281f09e896d6c88e2c32a4b7d5ab0eb1b38d5d4bd2f` |
+| `triples.parquet` | `5fdf31ceb66774981edf65cdffe4d38ac15d2165c15c7cb63ae7e23d27ee6255` |
+| `cpt.parquet` | `7a0f5329df04cd0d05bd17cee7b4141fb934867bcf7712c9c446713d2cf541b3` |
+| `probe.parquet` | `788dc3bdc2f38255c7cf7c313943c81ac11b6cd450ff29efb08cefbe43c3e97a` |
 
 The oracle is run without `--normalize snap`. That flag adds three columns
 this build does not read, and nothing else, but it changes the digest of
@@ -392,7 +468,7 @@ It rewrites `vendor/de9im_sf_verdicts.tsv`, which is what fills the
 `certification` column, and refuses to write a file whose verdicts contradict
 the oracle.
 
-699,002 triples and 144 distinct matrix-and-claim pairs. Over the full set,
+699,002 triples and 176 distinct matrix-and-kinds-and-claim pairs. Over the full set,
 the table allows the observed relation 646,290 times, allows only one and it
 is the observed one 52,712 times, exercises 27 of the 64 cells, and
 contradicts nothing. These files are not published as part of the dataset;

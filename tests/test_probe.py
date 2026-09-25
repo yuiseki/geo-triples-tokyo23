@@ -13,8 +13,9 @@ cpt, and the set must not silently become something else.
 import collections
 
 EXPECTED = {
+    "place-in-ward": 6162,
     "ward-in-state": 17,
-    "state-in-country": 2896,
+    "state-in-country": 2711,
 }
 
 
@@ -60,8 +61,11 @@ def test_the_japanese_half_is_a_subset_not_a_translation(probe, manifest):
     both = [r for r in probe if r["child_ja"] and r["parent_ja"]]
     assert manifest["probe"]["answerable_ja"] == len(both)
     assert len(both) < len(probe)
-    for r in both:
-        assert r["child_ja"] != r["child_en"] or not r["child_en"].isascii()
+    # Not that the two are always different strings: a place whose Japanese
+    # name is written in Latin script has the same label in both, and Torch
+    # Tower is one. What must not happen is a row counted as answerable in
+    # Japanese with no Japanese label at all, which the filter above is.
+    assert all(r["child_ja"] and r["parent_ja"] for r in both)
 
 
 def test_the_chance_rate_is_the_generous_one(probe, manifest):
@@ -74,6 +78,7 @@ def test_the_chance_rate_is_the_generous_one(probe, manifest):
     c = manifest["probe"]["candidates"]
     assert c["state-in-country"] == 258
     assert c["ward-in-state"] == 47
+    assert c["place-in-ward"] == 23
     parents = {r["level"]: set() for r in probe}
     for r in probe:
         parents[r["level"]].add(r["parent_id"])
@@ -93,3 +98,5 @@ def test_the_answer_is_not_read_off_the_relation(probe):
     by_rcc8 = collections.Counter(r["rcc8"] for r in probe)
     assert by_rcc8["PO"] > 0
     assert by_rcc8["NTPP"] + by_rcc8["TPP"] < len(probe)
+    # And a place mapped as a node has no RCC8 relation at all.
+    assert by_rcc8[""] > 0

@@ -14,9 +14,11 @@ for every true triple, so the places where a sentence is missing show up as an
 absence beside a line that is present, rather than as a row that was never
 written. A reader counting rows per form can see the label gap in the data.
 
-The templates are written for areas, because every feature in this dataset is
-an administrative area. A dataset that later holds a line or a point needs
-different wording and should say so rather than reuse these.
+Most templates are written for two areas. A place mapped as a node is a point,
+and a point is not contained in a ward the way a smaller area is, so the two
+predicates that can hold between a point and an area have wording of their
+own. Everything else involving a point is left unspoken rather than worded by
+analogy.
 """
 
 # The eight Simple Features predicates, in the order GeoSPARQL lists them.
@@ -74,6 +76,26 @@ TEMPLATES = {
     },
 }
 
+# A place and a ward. "含まれる" is how one area sits inside another; a point
+# is somewhere rather than inside something, and a ward has a place rather
+# than containing it.
+#
+# Only these two. A point on a ward boundary does touch it, and saying so in
+# ordinary words takes a sentence about boundaries that no reader asked for,
+# so that row keeps its N-Triples line and gets no sentence.
+POINT_TEMPLATES = {
+    ("point", "area"): {
+        "sfWithin": {"en": "{a} is in {b}.", "ja": "{a}は{b}にある。"},
+    },
+    ("area", "point"): {
+        # Not "{b} is in {a}", which is the within row's sentence word for
+        # word. The two rows are different statements and would become one
+        # repeated string, counted twice and learnt twice.
+        "sfContains": {"en": "{a} has {b}.", "ja": "{a}には{b}がある。"},
+    },
+}
+
+
 # For a triple the composition table entailed, the text says so and names the
 # step it came through. Without that a reader cannot tell an observation from
 # a deduction, and the whole point of keeping derivation is lost. The
@@ -113,16 +135,31 @@ def nt_text(triples):
     return "\n".join(nt_line(t) for t in triples)
 
 
+def wording(triple):
+    """The templates for this triple's predicate and kinds, or None.
+
+    Separated from sentence() so that a caller can ask whether a triple could
+    be spoken at all, apart from whether its features happen to carry labels.
+    Those are the two reasons a sentence is missing and counting them together
+    hides which one moved.
+    """
+    kinds = (triple.get("subject_kind") or "area",
+             triple.get("object_kind") or "area")
+    if kinds == ("area", "area"):
+        return TEMPLATES.get(triple["predicate"])
+    return POINT_TEMPLATES.get(kinds, {}).get(triple["predicate"])
+
+
 def sentence(triple, labels, lang):
     """One sentence, or None when it cannot be written.
 
-    None has three causes and they are deliberately not distinguished here,
+    None has four causes and they are deliberately not distinguished here,
     because the caller treats them the same: the predicate is not spoken, the
-    language has no template, or a feature has no label in this language. A
-    feature with no label gets no sentence rather than a romanisation passed
-    off as that language.
+    kinds have no wording for it, the language has no template, or a feature
+    has no label in this language. A feature with no label gets no sentence
+    rather than a romanisation passed off as that language.
     """
-    t = TEMPLATES.get(triple["predicate"])
+    t = wording(triple)
     if not t or lang not in t:
         return None
     a = labels.get((triple["subject_id"], lang))

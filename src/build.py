@@ -46,17 +46,20 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import certify  # noqa: E402
 import vocab  # noqa: E402
 
-# What a pair absent from relations.tsv is. The oracle omits disjoint pairs
-# because 4,877 features make 23.8 million of them; this is the matrix they
-# all share, and the one predicate that holds.
+# What a pair absent from relations.tsv is, for two areas. Disjointness is
+# spelled by the kinds, and the oracle's manifest carries the whole table, but
+# only this entry is ever reached here: a pair is filled in only when it was
+# composed, composition needs RCC8 on both premises, and RCC8 holds only
+# between regions. A point never reaches this line.
 DISJOINT_MATRIX = "FF2FF1212"
 
 # 2 when the cpt table stopped being one row per sentence and became one row
 # per form, with N-Triples as the canonical one. 3 when the certification
 # columns arrived and the derivation of an observed row stopped being named
-# after the tool that made it. A reader who has an older file can tell from
-# this field alone.
-SCHEMA_VERSION = "3"
+# after the tool that made it. 4 when the named places arrived and with them
+# the kind columns, because a pair is no longer always two areas. A reader who
+# has an older file can tell from this field alone.
+SCHEMA_VERSION = "4"
 
 
 def read_relations(path):
@@ -64,12 +67,14 @@ def read_relations(path):
         return list(csv.DictReader(f, delimiter="\t"))
 
 
-# Everything here is an administrative area. The prover asks because
-# sfOverlaps and sfCrosses are defined by cases on the operands' dimensions.
+# The default pair of kinds, for a caller that has no kinds to give. The
+# prover asks for them because sfOverlaps and sfCrosses are defined by cases
+# on the operands' dimensions, and since the places arrived not every pair
+# here is two areas.
 KINDS = ("area", "area")
 
 
-def certified(verdicts, matrix, predicate, truth):
+def certified(verdicts, matrix, predicate, truth, kinds=KINDS):
     """What LeanGeospatial proves about one reading, if it proves anything.
 
     Three states, kept apart on purpose. The oracle observed the matrix; that
@@ -82,7 +87,7 @@ def certified(verdicts, matrix, predicate, truth):
     the disagreement inside a certification column would be the worst of the
     three outcomes.
     """
-    verdict = verdicts.get((matrix, KINDS[0], KINDS[1], predicate))
+    verdict = verdicts.get((matrix, kinds[0], kinds[1], predicate))
     if verdict is None:
         return "uncertified", None
     if (verdict == "entailed") != bool(truth):
@@ -108,22 +113,25 @@ def direct_triples(rows, iris, verdicts):
     out = []
     for r in rows:
         held = set(r["sf_raw"].split(",")) if r["sf_raw"] else set()
+        kinds = (r["subject_kind"], r["object_kind"])
         for predicate in vocab.SF:
             truth = predicate in held
             certification, certificate = certified(
-                verdicts, r["de9im_raw"], predicate, truth)
+                verdicts, r["de9im_raw"], predicate, truth, kinds)
             out.append({
                 "subject_id": r["subject_id"],
                 "subject_iri": iris[r["subject_id"]],
                 "subject_name": r["subject_name"],
                 "subject_source": r["subject_source"],
                 "subject_layer": r["subject_layer"],
+                "subject_kind": r["subject_kind"],
                 "predicate": predicate,
                 "object_id": r["object_id"],
                 "object_iri": iris[r["object_id"]],
                 "object_name": r["object_name"],
                 "object_source": r["object_source"],
                 "object_layer": r["object_layer"],
+                "object_kind": r["object_kind"],
                 "truth": truth,
                 "certification": certification,
                 "certificate": certificate,
@@ -142,7 +150,33 @@ def direct_triples(rows, iris, verdicts):
     return out
 
 
-def composed_triples(rows, limit_per_cell=None):
+# The eight, by their lower-case spelling, so a table that stores them in one
+# case hands back the other without a case rule having to be invented twice.
+CANONICAL = {r.lower(): r for r in vocab.RCC8}
+
+
+def was_compared(oracle):
+    """Whether the oracle formed the pair between two layers at all.
+
+    Absent from relations.tsv means disjoint only for a pair the oracle
+    looked at. tokyo23-poi is compared against the wards and against nothing
+    else, so a place and a country are absent because they were never formed,
+    and reading that absence as disjointness says Sensoji is not in Japan.
+    """
+    limits = oracle["relations"].get("layers_compared") or {}
+
+    def compared(a_layer, b_layer):
+        for first, second in ((a_layer, b_layer), (b_layer, a_layer)):
+            allowed = limits.get(first)
+            if isinstance(allowed, list) and second not in allowed:
+                return False
+        return True
+
+    return compared
+
+
+def composed_triples(rows, limit_per_cell=None, compared=None,
+                     layer_of=None):
     """Triples the proved composition table settles, with the step they came
     through.
 
@@ -184,8 +218,26 @@ def composed_triples(rows, limit_per_cell=None):
                     continue
                 seen.add(key)
                 per_cell[(r, s)] += 1
-                t = next(iter(allowed)).upper()
+                # Back to the spelling the rest of the world uses. The table
+                # is lower case and upper() would give NTPPI, which is not a
+                # relation anybody names. Until the places arrived only DC and
+                # EC were ever entailed, and both survive upper() unharmed,
+                # so this waited to be found.
+                t = CANONICAL[next(iter(allowed))]
                 observed = rel.get((a, c))
+                if observed is None and compared and layer_of and \
+                        not compared(layer_of[a], layer_of[c]):
+                    # Entailed, and nothing to check it against. The pair was
+                    # never formed, so the row keeps its derivation and leaves
+                    # the observation columns empty rather than claiming a
+                    # matrix nobody read. These are the rows that reach beyond
+                    # what the oracle measured, which is what a composition
+                    # table is for.
+                    found.append({
+                        "a": a, "b": b, "c": c, "r": r, "s": s, "t": t,
+                        "observed": None, "observed_de9im": None,
+                    })
+                    continue
                 found.append({
                     "a": a, "b": b, "c": c, "r": r, "s": s, "t": t,
                     "observed": observed["rcc8_raw"] if observed else "DC",
@@ -198,13 +250,17 @@ def composed_triples(rows, limit_per_cell=None):
 def contradictions(composed):
     """Composed triples whose entailment disagrees with the geometry.
 
+    A row the oracle never formed has nothing to disagree with and is not
+    counted here. A row it did form and read differently is the real thing.
+
     A single-valued cell of a proved table leaves no room for disagreement,
     so a non-empty result here is not a data quirk to be counted and moved
     past: either the oracle mis-read a matrix or the vendored table is not
     the one that was proved. The build stops rather than shipping both
     readings in one row.
     """
-    return [c for c in composed if c["t"] != c["observed"]]
+    return [c for c in composed
+            if c["observed"] is not None and c["t"] != c["observed"]]
 
 
 def composition_table(path=None):
@@ -353,6 +409,7 @@ def feature_labels(ttl_paths):
 # the relation is an artefact of two sources drawing one coastline twice, and
 # 40.7% of states merely overlap the country they belong to.
 LEVELS = {
+    ("tokyo23-poi", "tokyo23"): "place-in-ward",
     ("tokyo23", "ne-admin1"): "ward-in-state",
     ("ne-admin1", "ne-admin0"): "state-in-country",
 }
@@ -399,6 +456,30 @@ def probe_rows(triples, labels, by_id):
             "rcc8": t["rcc8"],
         })
     out.sort(key=lambda r: (r["level"], r["child_id"]))
+    return drop_ambiguous_names(out)
+
+
+def drop_ambiguous_names(rows):
+    """Questions whose subject names more than one place.
+
+    21 of the places are called 天祖神社 and they are in different wards, so
+    "which ward is 天祖神社 in" has 21 answers and any one of them scores a
+    model on a coin toss. A place is kept only where its name picks it out
+    among the questions of its level, in both languages it is asked in.
+
+    Dropped rather than disambiguated. A name plus a ward would be a question
+    containing its own answer.
+    """
+    seen = collections.defaultdict(collections.Counter)
+    for r in rows:
+        for lang in ("en", "ja"):
+            if r["child_" + lang]:
+                seen[(r["level"], lang)][r["child_" + lang]] += 1
+    out = []
+    for r in rows:
+        if all(seen[(r["level"], lang)][r["child_" + lang]] == 1
+               for lang in ("en", "ja") if r["child_" + lang]):
+            out.append(r)
     return out
 
 
@@ -416,7 +497,9 @@ def probe_candidates(rows, layer_features):
     per_country = collections.Counter(in_country.values())
     counts = {}
     for level in sorted({r["level"] for r in rows}):
-        if level == "state-in-country":
+        if level == "place-in-ward":
+            counts[level] = layer_features["tokyo23"]
+        elif level == "state-in-country":
             # Every country in the layer, not only those that appear in
             # relations.tsv: three of the 258 are disjoint from everything
             # else and so are absent there, but a model naming a country is
@@ -462,7 +545,12 @@ def main():
     verdicts = certify.read_vendored()
     lean = certify.vendored_revision()
     triples = direct_triples(rows, iris, verdicts)
-    composed, per_cell = composed_triples(rows)
+    layer_of = {}
+    for r in rows:
+        layer_of[r["subject_id"]] = r["subject_layer"]
+        layer_of[r["object_id"]] = r["object_layer"]
+    composed, per_cell = composed_triples(rows, compared=was_compared(oracle),
+                                          layer_of=layer_of)
 
     wrong = contradictions(composed)
     if wrong:
@@ -485,12 +573,16 @@ def main():
                              or labels.get((c["a"], "ja"))),
             "subject_source": by_id[c["a"]][0],
             "subject_layer": by_id[c["a"]][1],
+            # Both regions, necessarily: a composed row exists only where RCC8
+            # held on both premises, and RCC8 holds only between regions.
+            "subject_kind": "area",
             "predicate": vocab.RCC8_TO_SF[c["t"]],
             "object_id": c["c"], "object_iri": iris[c["c"]],
             "object_name": (labels.get((c["c"], "en"))
                             or labels.get((c["c"], "ja"))),
             "object_source": by_id[c["c"]][0],
             "object_layer": by_id[c["c"]][1],
+            "object_kind": "area",
             "truth": True,
             # The composition step is the proved part: this cell of the table
             # is one of the 64 LeanGeospatial derives from its own definitions
@@ -571,6 +663,12 @@ def main():
             "false": sum(1 for t in triples if not t["truth"]),
             "by_derivation": dict(collections.Counter(
                 t["derivation"] for t in triples)),
+            # A derived row whose conclusion the oracle also measured, against
+            # one it never formed a pair for. The second kind is where the
+            # composition table says something the geometry was never asked.
+            "derived_beyond_what_was_measured": sum(
+                1 for t in triples
+                if t["derivation"] == "composition" and not t["de9im"]),
             "by_certification": dict(collections.Counter(
                 t["certification"] for t in triples)),
             "true_by_predicate": dict(collections.Counter(
@@ -659,11 +757,11 @@ def check_graphs(oracle, graphs, relations_path):
 TRIPLE_FIELDS = (
     ("subject_id", "string"), ("subject_iri", "string"),
     ("subject_name", "string"), ("subject_source", "string"),
-    ("subject_layer", "string"),
+    ("subject_layer", "string"), ("subject_kind", "string"),
     ("predicate", "string"),
     ("object_id", "string"), ("object_iri", "string"),
     ("object_name", "string"), ("object_source", "string"),
-    ("object_layer", "string"),
+    ("object_layer", "string"), ("object_kind", "string"),
     ("truth", "bool"), ("de9im", "string"), ("rcc8", "string"),
     ("certification", "string"), ("certificate", "string"),
     ("derivation", "string"), ("via_id", "string"), ("via_iri", "string"),
