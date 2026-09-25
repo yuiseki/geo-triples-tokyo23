@@ -295,6 +295,12 @@ that reason.
 A child that meets two parents is dropped, which is why 17 wards are asked
 about and not 23: six of them touch Chiba as well as Tokyo.
 
+18 questions give the answer away, and they are kept rather than quietly
+filtered. They are the `EQ` rows: a country with one state carries a feature
+in both layers with the same label, so the question reads "which country is
+Aruba in" and the answer is Aruba. 0.6% of the set, and a reader filtering
+on `rcc8 != "EQ"` removes them.
+
 For scale, a 35B model answering 120 questions per level:
 
 | | `state-in-country` | `ward-in-state` |
