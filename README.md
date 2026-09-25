@@ -321,7 +321,11 @@ without rebuilding anything.
 
 ## Reproducing it
 
+The code that builds this is at
+[yuiseki/geo-triples-tokyo23](https://github.com/yuiseki/geo-triples-tokyo23).
+
 ```bash
+git clone https://github.com/yuiseki/geo-triples-tokyo23
 git clone https://github.com/yuiseki/YuisekinGeoSPARQL
 cd YuisekinGeoSPARQL
 docker compose up --build
