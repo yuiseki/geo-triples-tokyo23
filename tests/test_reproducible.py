@@ -27,7 +27,7 @@ DIGESTS = {
     "cpt.parquet":
         "7a0f5329df04cd0d05bd17cee7b4141fb934867bcf7712c9c446713d2cf541b3",
     "probe.parquet":
-        "788dc3bdc2f38255c7cf7c313943c81ac11b6cd450ff29efb08cefbe43c3e97a",
+        "78280d3dc212075e61a6e5ca5c7bde9ceda02046f1caa2348a5779cce985779b",
 }
 
 WRITER = "pyarrow 20.0.0"

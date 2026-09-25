@@ -456,7 +456,7 @@ def probe_rows(triples, labels, by_id):
             "rcc8": t["rcc8"],
         })
     out.sort(key=lambda r: (r["level"], r["child_id"]))
-    return drop_ambiguous_names(out)
+    return drop_self_answering(drop_ambiguous_names(out))
 
 
 def drop_ambiguous_names(rows):
@@ -481,6 +481,23 @@ def drop_ambiguous_names(rows):
                for lang in ("en", "ja") if r["child_" + lang]):
             out.append(r)
     return out
+
+
+def drop_self_answering(rows):
+    """Questions that contain their own answer.
+
+    千代田 is a place inside 千代田区, and Aruba is a country with one state
+    also called Aruba. "Which ward is Chiyoda in" is not a question about
+    geography. 36 rows, and dropping them is cheaper than explaining in the
+    card why a model scores a few points for free.
+
+    Matched on the label in either language, not on the relation: the country
+    cases are EQ and the ward cases are not, so filtering by RCC8 would catch
+    one kind and leave the other.
+    """
+    return [r for r in rows
+            if not (r["child_en"] and r["child_en"] == r["parent_en"])
+            and not (r["child_ja"] and r["child_ja"] == r["parent_ja"])]
 
 
 def probe_candidates(rows, layer_features):

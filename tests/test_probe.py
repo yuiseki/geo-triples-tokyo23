@@ -13,9 +13,9 @@ cpt, and the set must not silently become something else.
 import collections
 
 EXPECTED = {
-    "place-in-ward": 6162,
+    "place-in-ward": 6157,
     "ward-in-state": 17,
-    "state-in-country": 2711,
+    "state-in-country": 2680,
 }
 
 
@@ -66,6 +66,19 @@ def test_the_japanese_half_is_a_subset_not_a_translation(probe, manifest):
     # Tower is one. What must not happen is a row counted as answerable in
     # Japanese with no Japanese label at all, which the filter above is.
     assert all(r["child_ja"] and r["parent_ja"] for r in both)
+
+
+def test_no_question_contains_its_own_answer(probe):
+    """千代田 inside 千代田区, and Aruba inside Aruba.
+
+    A question whose subject has its answer's name scores a model for free.
+    Matched on the label rather than on the relation: the country cases are EQ
+    and the ward cases are not, so an RCC8 filter catches one kind and leaves
+    the other.
+    """
+    for r in probe:
+        assert not (r["child_en"] and r["child_en"] == r["parent_en"]), r
+        assert not (r["child_ja"] and r["child_ja"] == r["parent_ja"]), r
 
 
 def test_the_chance_rate_is_the_generous_one(probe, manifest):

@@ -325,13 +325,13 @@ reading should use the oracle's normalized column instead of rewording these.
 
 ## The `probe` subset
 
-8,890 questions, 8,883 of them answerable in Japanese. Which parent does this
+8,854 questions, 8,847 of them answerable in Japanese. Which parent does this
 place have, at each level of the hierarchy the sources describe.
 
 | level | questions | choosing among | chance |
 |---|---:|---:|---:|
-| `place-in-ward` | 6,162 | 23 wards | 4.3% |
-| `state-in-country` | 2,711 | 258 countries | 0.4% |
+| `place-in-ward` | 6,157 | 23 wards | 4.3% |
+| `state-in-country` | 2,680 | 258 countries | 0.4% |
 | `ward-in-state` | 17 | 47 prefectures | 2.1% |
 
 **Every answer in this subset is stated in `cpt`.** It measures whether
@@ -359,11 +359,11 @@ same rule removes 185 states that share a name with another state. Dropped
 rather than disambiguated: a name plus a ward would be a question containing
 its own answer.
 
-18 questions give the answer away, and they are kept rather than quietly
-filtered. They are the `EQ` rows: a country with one state carries a feature
-in both layers with the same label, so the question reads "which country is
-Aruba in" and the answer is Aruba. 0.6% of the set, and a reader filtering
-on `rcc8 != "EQ"` removes them.
+36 questions contained their own answer and are gone. 千代田 is a place
+inside 千代田区, and Aruba is a country whose one state is also called Aruba.
+Matched on the label rather than on the relation, because the country cases
+are `EQ` and the ward cases are not, so an RCC8 filter catches one kind and
+leaves the other.
 
 For scale, 120 questions per level, asked of a 35B model and of the 270M one
 this corpus was built for:
@@ -426,7 +426,7 @@ python3 -m pytest
 |---|---|
 | `triples.parquet` | `5fdf31ceb66774981edf65cdffe4d38ac15d2165c15c7cb63ae7e23d27ee6255` |
 | `cpt.parquet` | `7a0f5329df04cd0d05bd17cee7b4141fb934867bcf7712c9c446713d2cf541b3` |
-| `probe.parquet` | `788dc3bdc2f38255c7cf7c313943c81ac11b6cd450ff29efb08cefbe43c3e97a` |
+| `probe.parquet` | `78280d3dc212075e61a6e5ca5c7bde9ceda02046f1caa2348a5779cce985779b` |
 
 The oracle is run without `--normalize snap`. That flag adds three columns
 this build does not read, and nothing else, but it changes the digest of
