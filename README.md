@@ -365,22 +365,31 @@ Matched on the label rather than on the relation, because the country cases
 are `EQ` and the ward cases are not, so an RCC8 filter catches one kind and
 leaves the other.
 
-For scale, 120 questions per level, asked of a 35B model and of the 270M one
-this corpus was built for:
+For scale, 120 questions per level with three worked examples in front of
+each, asked as a completion rather than through a chat template:
 
 | model | | `place-in-ward` | `state-in-country` | `ward-in-state` |
 |---|---|---:|---:|---:|
-| Qwen3.6-35B-A3B | en | 28.3% | 75.8% | 94.1% |
-| Qwen3.6-35B-A3B | ja | 41.7% | 49.2% | 94.1% |
-| gemma-3-270m-it | en | 3.3% | 20.0% | 23.5% |
-| gemma-3-270m-it | ja | 18.3% | 4.2% | 0.0% |
+| Qwen3.6-35B-A3B | en | 37.5% | 86.7% | 100.0% |
+| Qwen3.6-35B-A3B | ja | 45.8% | 63.3% | 100.0% |
+| Qwen3-0.6B-Base | en | 10.0% | 46.7% | 100.0% |
+| Qwen3-0.6B-Base | ja | 22.5% | 7.5% | 100.0% |
 
-Three things are worth reading off that table. The ward level is saturated at
-35B and the place level is nowhere near it, so the places are where there is
-room to move. The language gap reverses between levels: countries are easier
-to name in English and places in Tokyo are easier to name in Japanese, which
-is the same fact as the `name:en` gap above. And the 270M model is at or
-below chance in three of the six cells.
+Three things are worth reading off that table. `ward-in-state` is saturated at
+both sizes and should be read as a sanity check rather than as a score: there
+are 16 questions and the answer to every one of them is 東京都.
+
+`place-in-ward` is nowhere near saturated at 35B, which is where there is room
+to move.
+
+And the language gap reverses between levels. Countries are easier to name in
+English; places in Tokyo are easier to name in Japanese, by 8 points at 35B
+and by 12 at 0.6B. That is the same fact as the `name:en` gap above, seen from
+the other side.
+
+The protocol matters more than it looks. Asked cold, a base model continues
+the question instead of answering it; wrapped in the chat template it ships
+with, it does the same. Both read as 0% and neither is about geography.
 
 ## What this is for, and what is not known about it
 
